@@ -18,6 +18,21 @@ const int MPU_ADDRESS = 0x68;
 const int I2C_SDA_GPIO = 4;
 const int I2C_SCL_GPIO = 5;
 
+#define AVG_WINDOW_SIZE 10
+
+float roll_window[AVG_WINDOW_SIZE] = {0};
+float pitch_window[AVG_WINDOW_SIZE] = {0};
+int avg_index = 0;
+int avg_count = 0;
+
+float compute_average(float *buffer, int count) {
+    float sum = 0;
+    for (int i = 0; i < count; i++) {
+        sum += buffer[i];
+    }
+    return sum / count;
+}
+
 static void mpu6050_reset() {
     // Two byte reset. First byte register, second byte data
     // There are a load more options to set up the device in different ways that could be added here
@@ -77,45 +92,71 @@ void mpu6050_task(void *p) {
 
     // Data arrays
     int16_t acceleration[3], gyro[3], temp;
-    FusionEuler previousEuler = {0};
 
     while (1) {
-        // Read raw sensor data
-
         mpu6050_read_raw(acceleration, gyro, &temp);
+
         FusionVector gyroscope = {
             .axis.x = gyro[0] / 131.0f,
             .axis.y = gyro[1] / 131.0f,
             .axis.z = gyro[2] / 131.0f,
         };
-  
+        
         FusionVector accelerometer = {
             .axis.x = acceleration[0] / 16384.0f,
             .axis.y = acceleration[1] / 16384.0f,
             .axis.z = acceleration[2] / 16384.0f,
-        };      
-  
+        };
+
         FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, SAMPLE_PERIOD);
-  
-        const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
-  
-        float pitchDelta = euler.angle.pitch - previousEuler.angle.pitch;
 
-        putchar_raw(0xFF); 
+        const FusionEuler raw_euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
 
+        // Fill rolling buffer
+        roll_window[avg_index] = raw_euler.angle.roll;
+        pitch_window[avg_index] = raw_euler.angle.pitch;
+        
+        avg_index = (avg_index + 1) % AVG_WINDOW_SIZE;
+        if (avg_count < AVG_WINDOW_SIZE) avg_count++;
+        
+        // Compute averaged Euler angles
+        FusionEuler euler;
+        euler.angle.roll = compute_average(roll_window, avg_count);
+        euler.angle.pitch = compute_average(pitch_window, avg_count);
+        // euler.angle.yaw = raw_euler.angle.yaw; 
+        float pitchDelta = raw_euler.angle.pitch;
+
+        // Scaled roll and pitch
+        int16_t rollScaled = (int16_t)(euler.angle.roll * 100);
         int16_t pitchScaled = (int16_t)(euler.angle.pitch * 100);
-        putchar_raw((pitchScaled >> 8) & 0xFF);
+        // int16_t yawScaled = (int16_t)(euler.angle.yaw * 100);
+
+
+        // Sync byte
+        putchar_raw(0xFF);
+
+        // Send roll
+        putchar_raw(rollScaled & 0xFF);
+        putchar_raw((rollScaled >> 8) & 0xFF);
+        
+
+        // Send pitch
         putchar_raw(pitchScaled & 0xFF);
+        putchar_raw((pitchScaled >> 8) & 0xFF);
 
+        
+
+
+
+        // Gesture marker (optional, only when triggered)
         if (pitchDelta > 100.0f) {
-            putchar_raw(0xFE); 
+            putchar_raw(0xFE);
         }
-
-        previousEuler = euler;
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
+
 int main() {
     stdio_init_all();
 

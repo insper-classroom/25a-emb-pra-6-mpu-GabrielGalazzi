@@ -8,7 +8,10 @@ from tkinter import messagebox
 from time import sleep
 import time
 
+from collections import deque
+
 pyautogui.FAILSAFE = False
+
 def move_mouse(axis, value):
     """Move o mouse de acordo com o eixo e valor recebidos."""
     if axis == 0:
@@ -23,8 +26,9 @@ def controle(ser):
     """
     last_click_time = time.time()
     click_cooldown = 0.5
-    deadzone = 1000 
-    sensitivity = 1
+    deadzone = 1
+    sensitivity = 10
+
 
     while True:
         # Aguardar byte de sincronização
@@ -42,36 +46,32 @@ def controle(ser):
                 last_click_time = current_time
 
         elif sync_byte[0] == 0xFF:
+
             data = ser.read(size=4)
-            if len(data) < 4:
-                continue
+
+            if len(data) != 4:
+                continue  # skip incomplete packets
 
             roll = int.from_bytes(data[0:2], byteorder="little", signed=True)
             pitch = int.from_bytes(data[2:4], byteorder="little", signed=True)
 
-            alpha = 0.2  # Smoothing factor
-            smoothed_roll = 0
-            smoothed_pitch = 0
+            print(roll, pitch)
 
-            # Inside your loop:
-            smoothed_roll = alpha * roll + (1 - alpha) * smoothed_roll
-            smoothed_pitch = alpha * pitch + (1 - alpha) * smoothed_pitch
+            
+            dx = round(roll * sensitivity, 2)
+            dy = round(pitch * sensitivity, 2)
 
-            dx = round(smoothed_roll * sensitivity / 100.0, 2)
-            dy = round(smoothed_pitch * sensitivity / 100.0, 2)
+            if abs(roll) < deadzone :
+                dx = 0
+            if abs(pitch) < deadzone :
+                dy = 0
 
-
-            if abs(roll) < deadzone:
-                roll = 0
-            if abs(pitch) < deadzone:
-                pitch = 0
+            print(dx, dy)
 
             if dx != 0 or dy != 0:
-                
                 move_mouse(0, dx)
-                move_mouse(1, -dy)
-                # print(f"Moved mouse by ({dx}, {-dy})")
-                
+                move_mouse(1, dy)
+                                
 def serial_ports():
     """Retorna uma lista das portas seriais disponíveis na máquina."""
     ports = []
