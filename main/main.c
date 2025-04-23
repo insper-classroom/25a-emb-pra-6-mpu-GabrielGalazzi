@@ -19,11 +19,12 @@
 #define SAMPLE_PERIOD (0.01f)  // 10ms
 #define GESTURE_THRESHOLD 30.0f  // Degrees
 
-float compute_average(float buffer[10], int count) {
+float compute_average(const float buffer[10], int count) {
     float sum = 0;
     for (int i = 0; i < count; i++) sum += buffer[i];
     return sum / count;
 }
+
 
 static void mpu6050_reset() {
     uint8_t buf[] = {0x6B, 0x00};
