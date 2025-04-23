@@ -14,14 +14,10 @@ def move_mouse(dx, dy):
     pyautogui.moveRel(dx, dy, duration=0.01)
 
 def controle(ser):
-    """
-    Main loop that reads serial data and controls the mouse.
-    Waits for sync byte (0xFF) and then reads 4 bytes (roll, pitch).
-    """
     last_click_time = time.time()
-    click_cooldown = 0.5  
-    deadzone = 0.5        
-    sensitivity = 2       
+    click_cooldown = 0.5
+    deadzone = 3     # tolerance
+    sensitivity = 0.5  
 
     while True:
         sync_byte = ser.read(size=1)
@@ -32,16 +28,16 @@ def controle(ser):
             current_time = time.time()
             if current_time - last_click_time > click_cooldown:
                 pyautogui.click()
-                print("Click triggered")
                 last_click_time = current_time
 
         elif sync_byte[0] == 0xFF:
             data = ser.read(size=4)
             if len(data) != 4:
-                continue  # Skip incomplete packets
+                continue
 
             roll = int.from_bytes(data[0:2], byteorder="little", signed=True) / 100.0
             pitch = int.from_bytes(data[2:4], byteorder="little", signed=True) / 100.0
+
 
             dx = round(roll * sensitivity, 2)
             dy = round(pitch * sensitivity, 2)
@@ -52,7 +48,7 @@ def controle(ser):
                 dy = 0
 
             if dx != 0 or dy != 0:
-                move_mouse(dx, dy)
+                pyautogui.moveRel(dx, dy, _pause=False)
 
 def serial_ports():
     """Lists available serial ports."""
