@@ -12,6 +12,7 @@
 
 #include "Fusion.h"
 #define SAMPLE_PERIOD (0.01f) // replace this with actual sample period
+#define GESTURE_THRESHOLD 15000 // Lembrar de ajustar
 
 const int MPU_ADDRESS = 0x68;
 const int I2C_SDA_GPIO = 4;
@@ -60,7 +61,7 @@ static void mpu6050_read_raw(int16_t accel[3], int16_t gyro[3], int16_t *temp) {
 }
 
 void mpu6050_task(void *p) {
-    // configuracao do I2C
+    // I2C configuration
     i2c_init(i2c_default, 400 * 1000);
     gpio_set_function(I2C_SDA_GPIO, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL_GPIO, GPIO_FUNC_I2C);
@@ -68,19 +69,53 @@ void mpu6050_task(void *p) {
     gpio_pull_up(I2C_SCL_GPIO);
 
     mpu6050_reset();
-    int16_t acceleration[3], gyro[3], temp;
 
-    while(1) {
-        // leitura da MPU, sem fusao de dados
+    // Fusion AHRS setup
+    FusionAhrs ahrs;
+    FusionAhrsInitialise(&ahrs);
+    // Timing
+
+    // Data arrays
+    int16_t acceleration[3], gyro[3], temp;
+    FusionEuler previousEuler = {0};
+
+    while (1) {
+        // Read raw sensor data
+
         mpu6050_read_raw(acceleration, gyro, &temp);
-        printf("Acc. X = %d, Y = %d, Z = %d\n", acceleration[0], acceleration[1], acceleration[2]);
-        printf("Gyro. X = %d, Y = %d, Z = %d\n", gyro[0], gyro[1], gyro[2]);
-        printf("Temp. = %f\n", (temp / 340.0) + 36.53);
+        FusionVector gyroscope = {
+            .axis.x = gyro[0] / 131.0f,
+            .axis.y = gyro[1] / 131.0f,
+            .axis.z = gyro[2] / 131.0f,
+        };
+  
+        FusionVector accelerometer = {
+            .axis.x = acceleration[0] / 16384.0f,
+            .axis.y = acceleration[1] / 16384.0f,
+            .axis.z = acceleration[2] / 16384.0f,
+        };      
+  
+        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, SAMPLE_PERIOD);
+  
+        const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+  
+        float pitchDelta = euler.angle.pitch - previousEuler.angle.pitch;
+
+        putchar_raw(0xFF); 
+
+        int16_t pitchScaled = (int16_t)(euler.angle.pitch * 100);
+        putchar_raw((pitchScaled >> 8) & 0xFF);
+        putchar_raw(pitchScaled & 0xFF);
+
+        if (pitchDelta > 100.0f) {
+            putchar_raw(0xFE); 
+        }
+
+        previousEuler = euler;
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
-
 int main() {
     stdio_init_all();
 
