@@ -29,6 +29,7 @@ def controle(ser):
             if current_time - last_click_time > click_cooldown:
                 pyautogui.click()
                 last_click_time = current_time
+                print("TENTEI CLICKAR!!!!!!!!!!!!!!!!!!!!!!!")
 
         elif sync_byte[0] == 0xFF:
             data = ser.read(size=4)
@@ -48,7 +49,7 @@ def controle(ser):
                 dy = 0
 
             if dx != 0 or dy != 0:
-                pyautogui.moveRel(dx, dy, _pause=False)
+                pyautogui.moveRel(-dx, dy, _pause=False)
 
 def serial_ports():
     """Lists available serial ports."""

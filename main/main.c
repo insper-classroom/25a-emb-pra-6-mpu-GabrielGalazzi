@@ -19,7 +19,7 @@
 #define SAMPLE_PERIOD (0.01f)  // 10ms
 #define GESTURE_THRESHOLD 30.0f  // Degrees
 
-float compute_average(float buffer[], int count) {
+float compute_average(float buffer[10], int count) {
     float sum = 0;
     for (int i = 0; i < count; i++) sum += buffer[i];
     return sum / count;
@@ -133,7 +133,7 @@ void mpu6050_task(void *p) {
         int16_t rollScaled = (int16_t)(compute_average(roll_window, avg_count) * 100);
         int16_t pitchScaled = (int16_t)(compute_average(pitch_window, avg_count) * 100);
 
-        if (accelerometer.axis.x > 15000){
+        if (acceleration[0] > 10000){
             uart_putc(UART_ID, 0xFE);
         }
         else{
